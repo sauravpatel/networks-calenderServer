@@ -1,14 +1,108 @@
 #include "calender.h"
 #include "datetime.h"
+#include <vector>
+#include <map>
 #include <dirent.h>
 
 using namespace std;
 
+string handleClientData( int clientfd , char buffer[BUFSIZE] , int smode, string (&authenticate)[1024])
+{
+	/* MESSAGE PARSING
+	 * Client sends a request in the form of 
+	 * line containing words seperated by tabs in the format:
+	 * username + operation + date + startime + (endtime) + (eventname)
+	 */
+	
+	string opstatus="NOTHING";	//status after operation is executed
+	map<string,int> operationCodes;
+	operationCodes["add"		]	= ADD;
+	operationCodes["remove"		]	= REMOVE;
+	operationCodes["update"		]	= UPDATE;
+	operationCodes["get"		]	= GET;
+	operationCodes["getall"		]	= GETALL;
+	operationCodes["nextentry"	]	= NEXTENTRY;
+	
+	vector<string> parameters;
+	stringstream ss;
+	ss << buffer;
+	string query = ss.str();
+	//map<string,int> operationCodes;
+
+	unsigned tabPos;
+	while ( true )
+	{
+		tabPos = query.find("\t");
+		parameters.push_back(query.substr(0,tabPos));
+		cout<<query.substr(0,tabPos)<<"\n";
+		query = query.substr(tabPos);
+		if(query.compare("\t") != 0)
+			query = query.substr(1);
+		else
+			break;
+	}
+	string operation = string(parameters.at(OPERATION));
+	if(smode && authenticate[clientfd].empty() )
+		authenticate[clientfd] = string(parameters.at(USERNAME)) ;	//Authorize user
+	switch(operationCodes[operation])
+	{
+		case ADD:
+			if ( parameters.size() != 6 )
+				opstatus = INVALIDARGCOUNT;
+			else
+				opstatus = add( string(parameters[USERNAME]), string(parameters[DATE]), string(parameters[STARTIME]), string(parameters[ENDTIME]), string(parameters[EVENTNAME]) );
+				break;
+		case REMOVE:
+			if ( parameters.size() != 4 )
+				opstatus = INVALIDARGCOUNT;
+			else
+				opstatus = Remove( string(parameters[USERNAME]), string(parameters[DATE]), string(parameters[STARTIME]));
+				break;
+		case UPDATE:
+			if ( parameters.size() != 6 )
+				opstatus = INVALIDARGCOUNT;
+			else
+				opstatus = update( string(parameters[USERNAME]), string(parameters[DATE]), string(parameters[STARTIME]), string(parameters[ENDTIME]), string(parameters[EVENTNAME]));
+				break;
+		case GET:
+			if ( parameters.size() == 3 )
+				opstatus = get( string(parameters[USERNAME]), string(parameters[DATE]) , "" );
+			else if ( parameters.size() == 4 )
+				opstatus = get( string(parameters[USERNAME]), string(parameters[DATE]), string(parameters[STARTIME]) );
+			else
+				opstatus = INVALIDARGCOUNT;
+				break;
+		case GETALL:
+			if ( parameters.size() != 2 )
+				opstatus = INVALIDARGCOUNT;
+			else
+				opstatus = getall( string(parameters[USERNAME]), smode);
+			break;
+		/* NEXTENTRY
+		 * Here we have a authentication type system. We have a array of string "authenticate" which stores username corresponding
+		 * to a socket descriptor and the entry is removed when connection is closed. "nextentry()" is used to fetch jth entry 
+		 * in the user database. "nextentry()" takes two parameter a)username supplied from authenticate array and b) entry no.
+		 * message format of client : "nextentry" + "space" + "entry no."
+		 * So using socket descriptor (i) we can only access the database of user who opened it.
+		 */
+		case NEXTENTRY:
+			if ( parameters.size() != 3 )
+				opstatus = INVALIDARGCOUNT;
+			else{
+				opstatus = NextEntry( authenticate[clientfd], atoi(string(parameters[SEQNO]).c_str()));
+			}
+			break;
+		default:
+			opstatus = INVALIDOP ;
+	}
+	return opstatus;
+}
+/* -------------------------------------------------------------------------------- */
+
 /* detect conflicting entry in the file (filename) having 
- * ( 'date', 'startime' and 'endtime' ) same as parameters passed to the function
+ * ('date', 'startime' and 'endtime') same as parameters passed to the function
  * returns 0 if no conflict else the conflicting entry number ( sequence number of that entry in file )
  */
-
 int ConflictEntry(string filename, string date , string startime, string endtime)
 {
 	int entryno = 0;
@@ -45,6 +139,7 @@ int ConflictEntry(string filename, string date , string startime, string endtime
 	}
 	return retvalue;
 }
+/* --------------------------------------------------- */
 
 /*isempty file */
 bool IsFileEmpty(string filename)
@@ -66,21 +161,15 @@ bool IsFileEmpty(string filename)
 	}
 	return result;
 }
-
 /* --------------------------------------------------- */
 
 /* ADD operation */
 string add( string username, string date, string startime, string endtime, string eventname  )
 {
 	string status = "";
-	cout<<"Adding\n";
 	if(!CheckDateTime(date, startime, endtime))
 	{
 		status = Inttostr(WRONGDATE);	//invalid date or time
-	}
-	else if ( eventname.compare("") == 0 )
-	{
-		status = Inttostr(INVALIDARGCOUNT);	//some paramter(s) missing for ADD operation.
 	}
 	else
 	{
@@ -121,12 +210,7 @@ string add( string username, string date, string startime, string endtime, strin
 string Remove( string username, string date, string startime )
 {
 	string status = "";
-	if ( startime.compare("") == 0 )
-	{
-		status = Inttostr(INVALIDARGCOUNT);	//some paramter(s) missing for REMOVE operation."
-		return status;
-	}
-	else if(!CheckDateTime(date, startime))
+	if(!CheckDateTime(date, startime))
 	{
 		status = Inttostr(WRONGDATE);	//invalid date or time
 		return status;
@@ -137,7 +221,6 @@ string Remove( string username, string date, string startime )
 		string line;
 		string filename = USERDATA + username;
 		fstream myfile (filename.c_str());
-		status = Inttostr(NOEVENTEXIST);	//No such events exist
 		if (myfile.is_open())
 		{
 			while ( !myfile.eof() )
@@ -166,31 +249,25 @@ string Remove( string username, string date, string startime )
 			myfile.close();
 		}
 	}
+	if( status.compare("") == 0)
+		status = Inttostr(NOEVENTEXIST);	//Your profile doesn't exist.
+	
 	SyncCalender();	//remove eventless file
 	return status;
 }
-
 /* ------------------------------------------------------------------------ */
-/* UPDATE operation 
- * conflict check on update not enabled
- */
+
+/* UPDATE operation */
 string update( string username, string date, string startime, string endtime, string eventname )
 {
 	string status = "";
 	if(!CheckDateTime(date, startime, endtime))
 	{
 		status = Inttostr(WRONGDATE);	//invalid date or time
-		return status;
-	}
-	else if ( eventname.compare("") == 0 )
-	{
-		status = Inttostr(INVALIDARGCOUNT);	//some paramter(s) missing for UPDATE operation.
-		return status;
 	}
 	else
 	{
 		/* File Handling */
-		status = Inttostr(NOEVENTEXIST);	//Your profile doesn't exist
 		string line, oldentry;
 		oldentry = "";
 		int flag = 0;
@@ -263,6 +340,9 @@ string update( string username, string date, string startime, string endtime, st
 			}
 		}
 	}
+	if( status.compare("") == 0)
+		status = Inttostr(NOEVENTEXIST);	//Your profile doesn't exist.
+
 	SyncCalender();
 	return status;
 }
@@ -272,39 +352,32 @@ string update( string username, string date, string startime, string endtime, st
 string get( string username, string date, string startime )
 {
 	/* return format: "status_code" + "space" + "event_name/list of entries" */
-
 	string status;
-	
-	if(startime.compare("") != 0)
-	{
-		if(!CheckDateTime(date, startime))
-		{
-			status = Inttostr(WRONGDATE);	//invalid date or time
-			return status;
-		}
-	}
-	else if(!CheckDateTime(date ))
+	cout<<username<<":"<<date<<":"<<startime<<"\n";
+	if(!CheckDateTime(date, startime))
 	{
 		status = Inttostr(WRONGDATE);	//invalid date or time
-		return status;
 	}
 	/* File Handling */
-	status = Inttostr(DAYEVENTLIST) + " ";
+	status = "";
 	string line;
 	string filename = USERDATA + username;
+	cout<<filename;
 	fstream myfile (filename.c_str() , ios::in );
 	if (myfile.is_open())
 	{
 		while ( !myfile.eof() )
 		{
 			getline ( myfile , line );
-			if(line.compare("") == 0)
-				break;
+			if(line.compare("") == 0 || line.find(" ") == 0 )
+				continue;
 			
 			unsigned found = line.find("\t");
 			string currdate = line.substr (0, found);
 			if (date == currdate)
 			{
+				if( status.compare("") == 0)
+					status = Inttostr(DAYEVENTLIST) + " ";
 				string remainline = line.substr(found+1);
 				status += remainline + "\n";
 				if (startime.compare("") != 0)
@@ -323,15 +396,14 @@ string get( string username, string date, string startime )
 		}
 		myfile.close();
 	}
-	else
-	{
+	if( status.compare("") == 0)
 		status = Inttostr(NOEVENTEXIST);	//Your profile doesn't exist.
-	}
+	
 	SyncCalender();
 	return status;
 }
-
 /* ------------------------------------------------------------------------ */
+
 /* GETALL operation */
 string getall( string username, int smode )
 {
@@ -369,14 +441,13 @@ string getall( string username, int smode )
 	return status;
 
 }
-
 /* ------------------------------------------------------------------------ */
 
-/* It returns the event details correspoonding to the seq/entry number in the file
- */ 
+/* It returns the event details correspoonding to the seq/entry number in the file */ 
 string NextEntry ( string username, int seqno )
 {
-	string status = "";
+	
+	string status = "Invalid line number.\n";
 	string line;
 	int currindex = 1;
 	string filename = USERDATA + username;
@@ -389,21 +460,42 @@ string NextEntry ( string username, int seqno )
 			//  !last line				!empty line
 			if(line.compare("") == 0 || line.find(" ") == 0)
 				continue;
-			else
+			if ( seqno == currindex )
 			{
-				if ( seqno == currindex )
-					status  = line;
-				currindex++;
+				status  = line;
+				break;
 			}
+			currindex++;
 		}
 		myfile.close();
 	}
 	return status;
 }
-
 /* ------------------------------------------------- */
 
-//remove all dead entries
+/* 1 valid, 0 invalid */
+bool IsEntryValid(string line)
+{
+	bool valid = false;
+	time_t t = time(0);   // get time now
+    struct tm * now = localtime( & t );
+    string date = line.substr(0,line.find_last_of("\t"));
+    string time = line.substr(line.find_last_of("\t")+1);
+	if( (now->tm_year - 100) < atoi(date.substr(4,2).c_str()) )
+		valid=true;
+	else if( (now->tm_mon + 1) < atoi(date.substr(0,2).c_str()) )
+		valid=true;
+	else if( (now->tm_mday) < atoi(date.substr(2,2).c_str()) )
+		valid=true;
+	else if( (now->tm_hour) < atoi(time.substr(0,2).c_str()) )
+		valid=true;
+	else if( (now->tm_min) < atoi(time.substr(2,2).c_str()) )
+		valid=true;
+	return valid;
+}
+/* ------------------------------------------------------------------------------ */
+
+/* remove all dead entries */
 void SyncCalender()
 {
 	DIR *pDIR;
@@ -413,7 +505,7 @@ void SyncCalender()
 		while( (entry = readdir(pDIR)) )
 		{
 			if( strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0 )
-				cout<<entry->d_name<<" ";
+				continue;
 			stringstream ss;
 			ss << entry->d_name;
 			string filename = USERDATA + ss.str();
@@ -441,34 +533,4 @@ void SyncCalender()
 		}
 		closedir(pDIR);
 	}
-}
-
-//1 valid, 0 invalid
-// this function is working properly
-bool IsEntryValid(string line)
-{
-	bool valid = false;
-	time_t t = time(0);   // get time now
-    struct tm * now = localtime( & t );
-    /*cout << (now->tm_year - 100) << '-' 
-         << (now->tm_mon + 1) << '-'
-         << now->tm_mday
-         << endl
-         << now->tm_hour << ":"
-         << now->tm_min << ":"
-         << now->tm_sec
-         <<endl;*/
-    string date = line.substr(0,line.find_last_of("\t"));
-    string time = line.substr(line.find_last_of("\t")+1);
-	if( (now->tm_year - 100) < atoi(date.substr(4,2).c_str()) )
-		valid=true;
-	else if( (now->tm_mon + 1) < atoi(date.substr(0,2).c_str()) )
-		valid=true;
-	else if( (now->tm_mday) < atoi(date.substr(2,2).c_str()) )
-		valid=true;
-	else if( (now->tm_hour) < atoi(time.substr(0,2).c_str()) )
-		valid=true;
-	else if( (now->tm_min) < atoi(time.substr(2,2).c_str()) )
-		valid=true;
-	return valid;
 }

@@ -11,6 +11,8 @@
 #include <time.h>
 #include <sstream>
 
+#define BUFSIZE 2560
+
 using namespace std;
 
 /* Integer to string conversion */
@@ -68,36 +70,23 @@ int main( int argc , char **argv )
 		cout << "Type \'help\' to see usage.\n";
 		exit(1);
 	}
-	//if(argc > 7)
-	//{
-	//	checkdatetime(argv[5], argv[6], argv[7]);
-	//}
-	//else if(argc > 6)
-	//{
-	//	checkdatetime(argv[5], argv[6]);
-	//}
-	//else if(argc > 5)
-	//{
-	//	checkdatetime(argv[5]);
-	//}
-	
-	string hostname, port, message;
+
+	string hostname, port, message="";
 	hostname = argv[1];
 	port = argv[2];
 	
 	
-	string seperator = " ";
+	string seperator = "\t";
 	for (int i=3;i<argc; i++)
 		message += (argv[i] + seperator);
 	
 	int					sock_desc;
-	int					bufsize = 1024;
-	char				buffer[bufsize];
+	char				buffer[BUFSIZE];
 	struct addrinfo		hints;
 	struct addrinfo		*servinfo;	//point to the result
 	int					status;
 	
-	memset(buffer, 0, bufsize);
+	memset(buffer, 0, BUFSIZE);
 	memset(&hints, 0, sizeof hints);	//make sure the struct is empty
 	hints.ai_family = AF_UNSPEC;		//don't care IPv4 or IPv6
 	hints.ai_socktype = SOCK_STREAM;	//TCP stream sockets
@@ -130,13 +119,12 @@ int main( int argc , char **argv )
 	free(msg);
 	
 	/* wait for result from server */
-	int rdatalen = recv ( sock_desc, buffer, bufsize, 0);
+	int rdatalen = recv ( sock_desc, buffer, BUFSIZE, 0);
 	if(rdatalen <= 0)
 	{
 		cout<<"Error receiving data\n";
 		exit(1);
 	}
-	
 	//reply from server
 	string response = string(buffer);
 	int pos = response.find(" ");
@@ -197,12 +185,13 @@ int main( int argc , char **argv )
 	
 void GetallEntry( int sockfd , int entrycount)
 {
-	char buffer[1024];
+	char buffer[BUFSIZE];
 	cout<<"The events are : "<<entrycount<<" : \n";
+	cout<<"\tDate\t\tStart time\tEnd time\tEvent Name\n";
 	for ( int i = 1; i <= entrycount; i++)
 	{
 		sleep(2);
-		string request = "\t nextentry " + Inttostr(i);	//for uniformity in "getoperation()" '\t' is added in the beginning
+		string request = "anything\tnextentry\t" + Inttostr(i) + "\t";	//for uniformity in "getoperation()" '\t' is added in the beginning
 		char *msg = new char[request.length() + 1];
 		strcpy ( msg , request.c_str() );
 		if( send(sockfd, msg, strlen(msg), 0) <=0 )
@@ -210,8 +199,8 @@ void GetallEntry( int sockfd , int entrycount)
 			cout<<"Error sending \"getNext\" request.....aborting.......\n";
 			exit(2);
 		}
-		memset(buffer, 0, 1024);
-		if ( recv ( sockfd, buffer, 1024, 0) > 0)
+		memset(buffer, 0, BUFSIZE);
+		if ( recv ( sockfd, buffer, BUFSIZE, 0) > 0)
 		{
 			cout<<"\t"<<i<<". "<<buffer<<"\n";
 		}

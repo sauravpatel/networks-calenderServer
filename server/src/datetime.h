@@ -22,7 +22,6 @@ string Inttostr(int num)
 // validate date and time
 bool CheckDateTime(string date, string start, string end)
 {
-	cout<<"Checking date time.\n";
 	bool result = true;
 	int mm,dd,yyyy,hh[2],min[2];	
 	if((date.length() != 6) || (start.length() != 4 ) || ( end.length() != 4 ) )
@@ -37,7 +36,7 @@ bool CheckDateTime(string date, string start, string end)
 	{
 		mm = atoi(date.substr(0,2).c_str());
 		dd = atoi(date.substr(2,2).c_str());
-		yyyy = atoi(("20" + date.substr(4,2)).c_str());	//convert from 'yy' to 'yyyy'
+		yyyy = atoi(("20" + date.substr(4,2)).c_str());	
 		hh[1] = atoi(start.substr(0,2).c_str());
 		min[1] = atoi(start.substr(2,2).c_str());
 		hh[2] = atoi(end.substr(0,2).c_str());
@@ -51,25 +50,15 @@ bool CheckDateTime(string date, string start, string end)
 		}
 		else
 		{
-			/* check Start time is less than end time. */
 			if(start.compare(end) >= 0)
 			{
 				//cout<<"Start time must be less than end time.\n";
 				result=false;
 			}
-			/* check event date is greater than equal to current date */
 			else
 			{
 				time_t t = time(0);   // get time now
 				struct tm * now = localtime( & t );
-				/* cout << (now->tm_year + 1900) << '-' 
-					 << (now->tm_mon + 1) << '-'
-					 << now->tm_mday
-					 << endl
-					 << now->tm_hour << ":"
-					 << now->tm_min << ":"
-					 << now->tm_sec
-					 <<endl; */
 				string currtime = Inttostr(now->tm_hour) + Inttostr(now->tm_min);
 				if( (now->tm_year + 1900) > yyyy)
 				{
@@ -92,7 +81,7 @@ bool CheckDateTime(string date, string start, string end)
 						}
 						else if ( now->tm_mday == dd )
 						{
-							if ( start.compare(currtime) <= 0 )
+							if ( start.compare(currtime) <= 0  || end.compare(currtime) < 0 )
 							{
 								//cout<<"TIME ERROR\n";
 								result=false;
@@ -133,3 +122,5 @@ bool validtime(int hour, int min)
 		return 0;
 	return 1;
 }
+
+
