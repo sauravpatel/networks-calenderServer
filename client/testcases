@@ -1,0 +1,15 @@
+./client 127.0.0.1 7000 steve add 031513 0900 1100 Test1 
+./client 127.0.0.1 7000 steve add 031513 1300 1400 Meeting1 
+./client 127.0.0.1 7000 steve add 031513 1600 1830 Class 
+./client 127.0.0.1 7000 tim add 031513 1500 1630 Class 
+./client 127.0.0.1 7000 tim add 031613 1500 1530 Seminar 
+./client 127.0.0.1 7000 steve add 031613 0800 0930 Dentist 
+./client 127.0.0.1 7000 tim add 031513 1430 1530 Gym 
+./client 127.0.0.1 7000 tim remove 031513 1500 
+./client 127.0.0.1 7000 martin add 031713 0900 1130 Shopping 
+./client 127.0.0.1 7000 steve update 031613 0800 1000 Dentist 
+./client 127.0.0.1 7000 tim add 031713 0900 1200 Squash 
+./client 127.0.0.1 7000 martin update 031713 0800 1130 Shopping 
+./client 127.0.0.1 7000 tim get 031613 1500 
+./client 127.0.0.1 7000 martin get 031713 0800 
+./client 127.0.0.1 7000 steve get 031513 
