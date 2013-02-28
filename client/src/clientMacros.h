@@ -11,3 +11,4 @@
 #define UNAUTHORIZED			28
 #define INVALIDOP				29
 #define SERVERERROR				30
+#define REPEATEDEVENT			31

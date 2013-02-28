@@ -1,0 +1,16 @@
+// MAIN README
+
+makefile and readme(how to run) instructions for server and client programs are specified
+seperately in their respective folder.
+
+Here we will provide description of the programs.
+
+CLIENT SIDE :
+
+The client sends request in proper format and server replies back with 'codes' followed by 
+appropriate messages wherever required.
+
+
+SERVER SIDE :
+
+
