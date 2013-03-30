@@ -4,49 +4,14 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include "calender.h"
+#include <sstream>
 
 #define USERDATA "../users/"
 #define MYPORT		"7000"		// default port
 #define BACKLOG		10
 #define MYIP		"127.0.0.1"
-#define BUFSIZE		1024		//size of sent/received message buffers
 
-/* operations */
-#define ADD			11
-#define REMOVE		12
-#define UPDATE		13
-#define GET			14
-#define GETALL		15
-#define NEXTENTRY	16
-#define INVALID		10
-
-#define USERNAME	0
-#define OPERATION	1
-#define DATE		2
-#define SEQNO		2
-#define STARTIME	3
-#define ENDTIME		4
-#define EVENTNAME	5
-
-/*
- * create socket
- * bind
- * listen
- * accept
- */
- 
-/* syntax
- * socket()	: int socket(int domain, int type, int protocol);
- * bind() 	: int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
- * listen	: int listen(int sockfd, int backlog);
- * accept()	: int accept(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
- * send()	: int send(int sockfd, const void *msg, int len, int flags );
- * recv()	: int receive(int sockfd, const void *msg, int len, int flags );
- */
- 
 void *networkingThread ( void *arg);
-int getoperation(string operation);
-string handleClientData( int cfd, char buffer[BUFSIZE], int smode, string (&authenticate)[1024]);
 
 int main( int argc , char *argv[] )
 {
@@ -160,7 +125,7 @@ int main( int argc , char *argv[] )
 				else
 				/* querry received correctly from client */
 				{
-					char message[1024];
+					char message[BUFSIZE];
 					/* process the user querry using 'handleClientData' function 
 					 * and store the result in string 'response'
 					 */
@@ -252,7 +217,7 @@ int main( int argc , char *argv[] )
 							else
 							{
 								/* some data received from client */
-								char message[1024];
+								char message[BUFSIZE];
 								/* process the user querry using 'handleClientData' function 
 								 * and store the result in string 'response'
 								 */
@@ -297,106 +262,7 @@ int main( int argc , char *argv[] )
 	return (0);
 }
 
-/* ----------------------------------------------------------------------------- */
-
-int getoperation(string operation)
-{
-	if(operation.compare("add") == 0)
-		return ADD;
-	if(operation.compare("remove") == 0)
-		return REMOVE;
-	if(operation.compare("update") == 0)
-		return UPDATE;
-	if(operation.compare("get") == 0)
-		return GET;
-	if(operation.compare("getall") == 0)
-		return GETALL;
-	if(operation.compare("nextentry") == 0)
-		return NEXTENTRY;
-	return INVALID;
-}
-
 /*-----------------------------------------------------------------------------*/
-
-string handleClientData( int cfd , char buffer[BUFSIZE] , int smode, string (&authenticate)[1024])
-{
-	/* MESSAGE PARSING
-	 * Client sends a request in the form of 
-	 * line containing words seperated by spaces in the format:
-	 * username + operation + date + startime + (endtime) + (eventname)
-	 */
-	 
-	/* parsing the message 
-	 * 0:username
-	 * 1:operation
-	 * 2:date
-	 * 3:start
-	 * 4:end
-	 * 5:event
-	 */
-	char *pch;
-	int index=0;
-	string cmd[6]={"","","","","",""};
-	pch = strtok(buffer, " ");
-	while ( pch != NULL )
-	{
-		cmd[index]=pch;
-		index++;
-		pch = strtok(NULL," ");
-	}
-	
-	/* ------------------------------- */
-	string opstatus="";	//status after operation is executed
-	
-	
-	int operation = getoperation(cmd[OPERATION]);
-
-	if(smode && authenticate[cfd].empty() )
-	{
-		/* Authorize user */
-		authenticate[cfd] = string(cmd[USERNAME]);
-		cout<<"Authenticxation successful\n";
-	}
-		
-	switch(operation)
-	{
-		case ADD:
-			opstatus = add( cmd[USERNAME], cmd[DATE], cmd[STARTIME], cmd[ENDTIME], cmd[EVENTNAME]);
-			break;
-			
-		case REMOVE:
-			opstatus = Remove( cmd[USERNAME], cmd[DATE], cmd[STARTIME]);
-			break;
-			
-		case UPDATE:
-			opstatus = update( cmd[USERNAME], cmd[DATE], cmd[STARTIME], cmd[ENDTIME], cmd[EVENTNAME]);
-			break;
-			
-		case GET:
-			opstatus = get( cmd[USERNAME], cmd[DATE], cmd[STARTIME]);
-			break;
-			
-		case GETALL:
-			opstatus = getall( cmd[USERNAME], smode);
-			break;
-		case NEXTENTRY:
-		/* 
-		 * Here we have a authentication type system. We have a array of string "authenticate" which stores username corresponding
-		 * to a socket descriptor and the entry is removed when connection is closed. "nextentry()" is used to fetch jth entry 
-		 * in the user database. "nextentry()" takes two parameter a)username supplied from authenticate array and b) entry no.
-		 * message format of client : "nextentry" + "space" + "entry no."
-		 * So using socket descriptor (i) we can only access the database of user who opened it.
-		 */
-			opstatus = NextEntry( authenticate[cfd], atoi(cmd[SEQNO].c_str()));
-			break;
-			
-		default:
-			opstatus = INVALIDOP ;
-	}
-	return opstatus;
-}
-
-/* --------------------------------------------------- */
 
 /* operation for each thread */
 void *networkingThread( void *arg)
@@ -407,27 +273,27 @@ void *networkingThread( void *arg)
 		perror("Accept connection:- ");
 		exit(1);
 	}
-	int bufsize = BUFSIZE;
-	char buffer[bufsize];
-	memset(buffer, 0, bufsize);
+	char buffer[BUFSIZE];
+	memset(buffer, 0, BUFSIZE);
 	string authenticate[1024];
 
 	/* receive data */
-	while (recv ( sockfd, buffer, bufsize, 0) > 0 )
+	while (recv ( sockfd, buffer, BUFSIZE, 0) > 0 )
 	{
 		cout <<"current socket fd : "<< sockfd <<"\n";
 		/* some data received from client */
-		char message[1024];
+		char message[BUFSIZE];
 		string response = handleClientData(sockfd, buffer, 1 , authenticate);
 		strcpy(message,response.c_str());
 		/* send appropriate response to client */
 		int sdatalen = send(sockfd, message, strlen(message), 0);
 		if(sdatalen == -1)
 			cout<<"error sending\n";
+		bzero(buffer, BUFSIZE);
 	}
 	/* deauthorize user */
 	authenticate[sockfd] = "";
-	cout<<"selectserver: socket "<<sockfd<<" hung up\n";
+	cout<<"Socket "<<sockfd<<" hung up\n";
 	close(sockfd); // bye!
 	return 0;
 }

@@ -9,7 +9,10 @@
 #include "macros.h"
 #include <string.h>
 #include <time.h>
+#include <map>
 #include <sstream>
+
+#define BUFSIZE 2560
 
 using namespace std;
 
@@ -24,80 +27,89 @@ string Inttostr(int num)
 void GetallEntry( int sockfd , int entrycount);
 
 /* ERROR CODES
- * 0-operation successfull
- * 1-conflict detected
- * 2-event does not exist
- * 3-invalid number of arguments
- * 4-startime > endtime
- * 5-get event name
- * 6-all event of the day [event lists]
- * 7-getall reply[no. of events]
- * 8-permission denied
- * 9-unknown error, try later
- */
-/* syntax
- * socket()	: int socket(int domain, int type, int protocol);
- * connect(): int connect(int sockfd, const struct sockaddr *addr, socklen_t  addrlen);
- * read()	: ssize_t read(int fd, void *buf, size_t count);
- * write()	: ssize_t write(int fd, void *buf, size_t count);
- * send()	: int send(int sockfd, const void *msg, int len, int flags );
- * recv()	: int receive(int sockfd, const void *msg, int len, int flags );
+ * 20-operation successfull
+ * 21-conflict detected
+ * 22-event does not exist
+ * 23-invalid number of arguments
+ * 24-startime > endtime
+ * 25-get event name
+ * 26-all event of the day [event lists]
+ * 27-getall reply[no. of events]
+ * 28-permission denied
+ * 29-unknown error, try later
  */
  
+void usage()
+{
+	//cout<<"USAGE :: [program] [HOST] [PORT] [USERNAME] [OPERATION] [DATE] [STARTTIME] [ENDTIME] [EVENTNAME]\n";
+	cout<<"A: Adding an event	: ./client hostname port username add date start end event\n";
+	cout<<"B: Removing an event	: ./client hostname port username remove date start\n";
+	cout<<"C: Updating an event	: ./client hostname port username update date start end event \n";
+	cout<<"D: Getting event type	: ./client hostname port username get date start \n";
+	cout<<"E: All event of day	: ./client hostname port username get date \n";
+	cout<<"F: All event of user**	: ./client hostname port username getall \n";
+	cout<<"Date Format\t\t:  MMDDYY\n";
+	cout<<"Time Format\t\t:  HHMM(24 hour clock)\n";
+	cout<<"* Event must finish on the day it started.\n";
+	cout<<"** Not available for server running in iterative mode \n\n";
+}
+
+/*  */
+void processReply( string response , int sock_desc )
+{
+	int condcodes = atoi(response.substr(0,2).c_str());
+	response = response.substr(2);
+	map<int,string> operationCodes;
+	operationCodes[SUCCESS			]	= "Operation successful.\n";
+	operationCodes[CONFLICT			]	= "Conflict Detected with entry : ";
+	operationCodes[NOEVENTEXIST		]	= "Event does not exist.\n";
+	operationCodes[INVALIDARGCOUNT	]	= "Invalid number of arguments.\nType \'help\' to see usage.\n";
+	operationCodes[WRONGDATE		]	= "Invalid date-time.\n";
+	operationCodes[EVENTTYPE		]	= "Requested event name is : ";
+	operationCodes[DAYEVENTLIST		]	= "Event(s) of the day are : \n";
+	operationCodes[UNAUTHORIZED		]	= "The server is not configured to perform GETALL function. Please try again later!!!\n";
+	operationCodes[INVALIDOP		]	= "Invalid operation.\n";
+	operationCodes[SERVERERROR		]	= "Server failure.\n";
+
+		switch(condcodes)
+		{
+		case GETALLCOUNT:
+			{
+				int entrycount = atoi(response.c_str());
+				cout<<"Number of events are : "<<entrycount<<"\n";
+				if(entrycount > 0)
+					GetallEntry( sock_desc , entrycount);
+				break;
+			}
+		default:
+			cout<<operationCodes[condcodes]<<response;
+			break;
+		}
+}
+
 int main( int argc , char **argv )
 {	
 	if(argc < 5 )
 	{
-		string s=argv[1];
-		cout<<"USAGE :: [program] [HOST] [PORT] [USERNAME] [OPERATION] [DATE] [STARTTIME] [ENDTIME] [EVENTNAME]\n";
-		cout<<"A: Adding an event	: ./mycal hostname port myname add date start end Exam\n";
-		cout<<"B: Removing an event	: ./mycal hostname port myname remove date start\n";
-		cout<<"C: Updating an event	: ./mycal hostname port myname update date start end OralExam \n";
-		cout<<"D: Getting event type	: ./mycal hostname port myname get date start \n";
-		cout<<"E: All event of day	: ./mycal hostname port myname get date \n";
-		cout<<"F: All event of user**	: ./mycal hostname port myname getall \n";
-		cout<<"** Not available for server running in iterative mode \n\n";
-		cout<<"Date Format\t\t:  MMDDYY\n";
-		cout<<"Time Format\t\t:  HHMM(24 hour clock)\n";
+		usage();
 		exit(1);
 	}
-	
-	if ( argc < 5 || argc > 9)
-	{
-		cout << "Invalid number of arguments.\n";
-		cout << "Type \'help\' to see usage.\n";
-		exit(1);
-	}
-	//if(argc > 7)
-	//{
-	//	checkdatetime(argv[5], argv[6], argv[7]);
-	//}
-	//else if(argc > 6)
-	//{
-	//	checkdatetime(argv[5], argv[6]);
-	//}
-	//else if(argc > 5)
-	//{
-	//	checkdatetime(argv[5]);
-	//}
-	
-	string hostname, port, message;
+
+	string hostname, port, message="";
 	hostname = argv[1];
 	port = argv[2];
-	
-	
-	string seperator = " ";
+
+	string seperator = "\t";
 	for (int i=3;i<argc; i++)
 		message += (argv[i] + seperator);
 	
 	int					sock_desc;
-	int					bufsize = 1024;
-	char				buffer[bufsize];
+	char				buffer[BUFSIZE];
 	struct addrinfo		hints;
 	struct addrinfo		*servinfo;	//point to the result
 	int					status;
 	
-	memset(buffer, 0, bufsize);
+	memset(buffer, 0, BUFSIZE);
 	memset(&hints, 0, sizeof hints);	//make sure the struct is empty
 	hints.ai_family = AF_UNSPEC;		//don't care IPv4 or IPv6
 	hints.ai_socktype = SOCK_STREAM;	//TCP stream sockets
@@ -130,63 +142,14 @@ int main( int argc , char **argv )
 	free(msg);
 	
 	/* wait for result from server */
-	int rdatalen = recv ( sock_desc, buffer, bufsize, 0);
+	int rdatalen = recv ( sock_desc, buffer, BUFSIZE, 0);
 	if(rdatalen <= 0)
 	{
 		cout<<"Error receiving data\n";
 		exit(1);
 	}
-	
 	//reply from server
-	string response = string(buffer);
-	int pos = response.find(" ");
-	int condcodes = atoi(response.substr(0,pos).c_str());
-	response = response.substr(pos+1);
-	switch(condcodes)
-	{
-		case SUCCESS:
-			cout<<"Operation successful.\n";
-			break;
-		case CONFLICT:
-			cout<<"Conflict Detected with entry : "<<response<<".\n";
-			break;
-		case NOEVENTEXIST:
-			cout<<"Event does not exist.\n";
-			break;
-		case INVALIDARGCOUNT:
-			cout<<"Invalid number of arguments.\n";
-			break;
-		case WRONGDATE:
-			cout<<"Invalid date-time.\n";
-			break;
-		case EVENTTYPE:
-			cout<<"Requested event name is : "<<response<<"\n";
-			break;
-		case DAYEVENTLIST:
-			cout<<"Event(s) of the day are : \n"<<response<<"\n";
-			break;
-		case GETALLCOUNT:
-			{
-				int entrycount = atoi(response.c_str());
-				cout<<"Number of events are : "<<entrycount<<"\n";
-				if(entrycount > 0)
-					GetallEntry( sock_desc , entrycount);
-				break;
-			}
-		case UNAUTHORIZED:
-			cout<<"The server is not configured to perform GETALL function. Please try again later!!!\n";
-			break;
-		case INVALIDOP:
-			cout<<"Invalid operation.\n";
-			break;
-		case SERVERERROR:
-			cout<<"Server failure\n";
-			break;
-		default:
-			cout<<"Default response : "<<response;
-			break;
-			
-	}
+	processReply( string(buffer) , sock_desc );	
 	close(sock_desc);
 	return (0);
 }
@@ -197,12 +160,13 @@ int main( int argc , char **argv )
 	
 void GetallEntry( int sockfd , int entrycount)
 {
-	char buffer[1024];
+	char buffer[BUFSIZE];
 	cout<<"The events are : "<<entrycount<<" : \n";
+	cout<<"\tDate\t\tStart time\tEnd time\tEvent Name\n";
 	for ( int i = 1; i <= entrycount; i++)
 	{
 		sleep(2);
-		string request = "\t nextentry " + Inttostr(i);	//for uniformity in "getoperation()" '\t' is added in the beginning
+		string request = "anything\tnextentry\t" + Inttostr(i) + "\t";	//for uniformity in "getoperation()" '\t' is added in the beginning
 		char *msg = new char[request.length() + 1];
 		strcpy ( msg , request.c_str() );
 		if( send(sockfd, msg, strlen(msg), 0) <=0 )
@@ -210,14 +174,10 @@ void GetallEntry( int sockfd , int entrycount)
 			cout<<"Error sending \"getNext\" request.....aborting.......\n";
 			exit(2);
 		}
-		memset(buffer, 0, 1024);
-		if ( recv ( sockfd, buffer, 1024, 0) > 0)
+		memset(buffer, 0, BUFSIZE);
+		if ( recv ( sockfd, buffer, BUFSIZE, 0) > 0)
 		{
 			cout<<"\t"<<i<<". "<<buffer<<"\n";
 		}
 	}
 }
-
-/* ------****** */
-
-
