@@ -6,6 +6,9 @@
 
 using namespace std;
 
+/* 'clientfd' and 'authenticate' is used only for the 'nextentry' function call
+ * 'authenticate[clientfd]' contains username for connection established on socket descriptor 'clientfd'
+ */
 string handleClientData( int clientfd , char buffer[BUFSIZE] , int smode, string (&authenticate)[1024])
 {
 	/* MESSAGE PARSING
@@ -33,7 +36,7 @@ string handleClientData( int clientfd , char buffer[BUFSIZE] , int smode, string
 	{
 		tabPos = query.find("\t");
 		parameters.push_back(query.substr(0,tabPos));
-		cout<<query.substr(0,tabPos)<<"\n";
+		//cout<<query.substr(0,tabPos)<<"\n";
 		query = query.substr(tabPos);
 		if(query.compare("\t") != 0)
 			query = query.substr(1);
@@ -68,13 +71,6 @@ string handleClientData( int clientfd , char buffer[BUFSIZE] , int smode, string
 			if ( parameters.size() == 2 )
 				opstatus = getall( string(parameters[USERNAME]), smode);
 			break;
-		/* NEXTENTRY
-		 * Here we have a authentication type system. We have a array of string "authenticate" which stores username corresponding
-		 * to a socket descriptor and the entry is removed when connection is closed. "nextentry()" is used to fetch jth entry 
-		 * in the user database. "nextentry()" takes two parameter a)username supplied from authenticate array and b) entry no.
-		 * message format of client : "nextentry" + "space" + "entry no."
-		 * So using socket descriptor (i) we can only access the database of user who opened it.
-		 */
 		case NEXTENTRY:
 			if ( parameters.size() == 3 )
 				opstatus = NextEntry( authenticate[clientfd], atoi(string(parameters[SEQNO]).c_str()));
@@ -82,7 +78,6 @@ string handleClientData( int clientfd , char buffer[BUFSIZE] , int smode, string
 		default:
 			opstatus = Inttostr( INVALIDOP ) ;
 	}
-	cout<<opstatus;
 	return opstatus;
 }
 /* -------------------------------------------------------------------------------- */
@@ -110,12 +105,12 @@ int ConflictEntry(string filename, string date , string startime, string endtime
 			if (date == currdate)
 			{
 				line = line.substr(line.find("\t")+1);
-				string currendtime = line.substr(0,line.find("\t"));
-				if (endtime > currendtime)
+				string currStartTime = line.substr(0,line.find("\t"));
+				if (endtime > currStartTime )
 				{
 					line = line.substr(line.find("\t")+1);
-					string currstartime = line.substr(0,line.find("\t"));
-					if(startime < currstartime)
+					string currEndTime = line.substr(0,line.find("\t"));
+					if(startime < currEndTime )
 					{
 						retvalue = entryno;
 						break;
@@ -140,7 +135,7 @@ bool IsFileEmpty(string filename)
 		while ( !myfile.eof() )
 		{
 			getline ( myfile , line );
-			if(line.find(" ") == 0 )
+			if(line.find(" ") != 0 )
 			{
 				result = false;
 				break;
@@ -264,16 +259,18 @@ string update( string username, string date, string startime, string endtime, st
 		fstream myfile (filename.c_str() );
 		if (myfile.is_open())
 		{
-			while ( !myfile.eof() || !flag )	//finding the event to be updated
+			while ( !myfile.eof() && !flag )	//finding the event to be updated
 			{
 				int currfptr = myfile.tellg();
 				getline ( myfile , line );
 				oldentry = line;
-				if(line.compare("") == 0)
-					break;
+				if(line.compare("") == 0 || line.find(" ") == 0)
+					continue;
 				string currdate = line.substr(0,line.find("\t"));
 				if (date == currdate)
 				{
+					string str;
+					str.insert( 0 ,line.length(),' ');
 					line = line.substr(line.find("\t")+1);
 					string currstartime = line.substr(0,line.find("\t"));
 					if (startime == currstartime )	//found the entry to be changed
@@ -283,13 +280,12 @@ string update( string username, string date, string startime, string endtime, st
 						if(updateentry.compare(oldentry) == 0 )
 						{
 							flag = 0;
-							status = Inttostr(SUCCESS);	//nothing to change ( new is old and old is new )
+							status = Inttostr(REPEATEDEVENT);	// same event already exists
 							break;
 						}
 						match = currfptr;
 						myfile.seekp(match);
-						line.replace(line.begin(),line.end(),line.length(),' ');
-						myfile<<line.c_str();	//remove old entry
+						myfile<<str.c_str();	//remove old entry
 					}
 				}
 			}
@@ -315,14 +311,14 @@ string update( string username, string date, string startime, string endtime, st
 				else
 				{
 					//no conflict, add new event in the calender
-					line = date + "\t" + startime + "\t" + endtime + "\t" + eventname + "\n";
-					myfile.open (filename.c_str() );
+					fstream myfile;
+					myfile.open (filename.c_str() , ios::out | ios::app );
 					if ( myfile.is_open() )
 					{
-						myfile.seekp(match);
-						myfile<<line.c_str();
+						string str = date + "\t" + startime + "\t" + endtime + "\t" + eventname + "\n";
+						myfile << str.c_str();
 						myfile.close();
-						status = Inttostr(SUCCESS);	//Event updated successfully.
+						status = Inttostr(SUCCESS);
 					}
 				}
 			}
@@ -341,7 +337,6 @@ string get( string username, string date, string startime )
 {
 	/* return format: "status_code" + "space" + "event_name/list of entries" */
 	string status;
-	cout<<username<<":"<<date<<":"<<startime<<"\n";
 	if(!CheckDateTime(date, startime))
 	{
 		status = Inttostr(WRONGDATE);	//invalid date or time
@@ -350,7 +345,6 @@ string get( string username, string date, string startime )
 	status = "";
 	string line;
 	string filename = USERDATA + username;
-	cout<<filename;
 	fstream myfile (filename.c_str() , ios::in );
 	if (myfile.is_open())
 	{
@@ -430,8 +424,14 @@ string getall( string username, int smode )
 
 }
 /* ------------------------------------------------------------------------ */
-
-/* It returns the event details correspoonding to the seq/entry number in the file */ 
+/* NEXTENTRY
+ * Here we have a authentication type system. We have a array of string "authenticate" which stores username corresponding
+ * to a socket descriptor and the entry is removed when connection is closed. "nextentry()" is used to fetch jth entry 
+ * in the user database. "nextentry()" takes two parameter a)username supplied from authenticate array and b) entry no.
+ * message format of client : "nextentry" + "space" + "entry no."
+ * So using socket descriptor (i) we can only access the database of user who opened it.
+ * It returns the event details correspoonding to the seq/entry number in the file 
+ */ 
 string NextEntry ( string username, int seqno )
 {
 	
@@ -461,29 +461,32 @@ string NextEntry ( string username, int seqno )
 }
 /* ------------------------------------------------- */
 
-/* 1 valid, 0 invalid */
+/* 1 valid, 0 invalid 
+ * Checks if event has passed its endtime
+ * string 'line' = 'date'\t'startime'\t'endtime'
+ */
 bool IsEntryValid(string line)
 {
 	bool valid = false;
 	time_t t = time(0);   // get time now
     struct tm * now = localtime( & t );
-    string date = line.substr(0,line.find_last_of("\t"));
-    string time = line.substr(line.find_last_of("\t")+1);
+    string date = line.substr(0,line.find("\t"));
+    string endtime = line.substr(line.find_last_of("\t")+1);
 	if( (now->tm_year - 100) < atoi(date.substr(4,2).c_str()) )
 		valid=true;
 	else if( (now->tm_mon + 1) < atoi(date.substr(0,2).c_str()) )
 		valid=true;
 	else if( (now->tm_mday) < atoi(date.substr(2,2).c_str()) )
 		valid=true;
-	else if( (now->tm_hour) < atoi(time.substr(0,2).c_str()) )
+	else if( (now->tm_hour) < atoi(endtime.substr(0,2).c_str()) )
 		valid=true;
-	else if( (now->tm_min) < atoi(time.substr(2,2).c_str()) )
+	else if( (now->tm_min) < atoi(endtime.substr(2,2).c_str()) )
 		valid=true;
 	return valid;
 }
 /* ------------------------------------------------------------------------------ */
 
-/* remove all dead entries */
+/* remove all invalid/completed events */
 void SyncCalender()
 {
 	DIR *pDIR;
@@ -492,7 +495,7 @@ void SyncCalender()
 	{
 		while( (entry = readdir(pDIR)) )
 		{
-			if( strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0 )
+			if( strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 )
 				continue;
 			stringstream ss;
 			ss << entry->d_name;
@@ -505,10 +508,12 @@ void SyncCalender()
 				{
 					int currfptr = myfile.tellg();
 					getline ( myfile , line );
+					cout<<line<<"\n";
 					if(line.compare("") == 0 || line.find(" ") == 0)
 						continue;
 					if( !IsEntryValid(line.substr(0,line.find_last_of("\t"))) )	//remove invalid entry
 					{
+						cout<<"Found invalid:"<<line<<":\n";
 						myfile.seekp(currfptr);
 						line.replace(line.begin(),line.end(),line.length(),' ');
 						myfile<<line.c_str();
@@ -516,8 +521,11 @@ void SyncCalender()
 				}
 				myfile.close();
 			}
-			if(!IsFileEmpty(filename))
+			if(IsFileEmpty(filename))
+			{
+				cout<<"removing "<<filename;
 				remove(filename.c_str());	//remove eventless file
+			}
 		}
 		closedir(pDIR);
 	}

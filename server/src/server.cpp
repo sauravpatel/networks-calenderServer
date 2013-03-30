@@ -6,18 +6,27 @@
 #include "calender.h"
 #include <sstream>
 
-#define USERDATA "../users/"
 #define MYPORT		"7000"		// default port
 #define BACKLOG		10
 #define MYIP		"127.0.0.1"
 
+/* Function is called when thread is created for multithreading*/
 void *networkingThread ( void *arg);
-
+/*
+ * usage: ./server [MODE] [PORT]
+ * server can run in three mode( 1 , 2 or 3)
+ * 	a. 1 -> iterative approach
+ *	b. 2 -> using 'select' function call
+ *	c. 3 -> using multithreaded approach
+ * 'getall' function is not available in iterative approach
+ * If port is not specified , server is started on '7000'
+ * If nothing is specified, server starts with iterative aproach and uses port '7000'
+*/
 int main( int argc , char *argv[] )
 {
 	pthread_t threadId;
 	string port;
-	string authenticate[1024];	//used for getall only
+	string authenticate[1024];	//used for getall only. Stores username corresponding to ith socket file descriptor
 	for(int i=0;i<1024;i++)
 		authenticate[i] = "";
 	string servermode;
@@ -36,23 +45,25 @@ int main( int argc , char *argv[] )
 	else
 	{
 		servermode = "0";
+		port = MYPORT;
+		cout<<"\nNo mode,port specified.\n";
+		cout<<"Continuing with default mode 'iterative' and port:"<< MYPORT <<"\n\n";
 	}
 
-    int							sock_desc;		// listening socket descriptor
-	int							new_socket;		// newly accept()ed socket descriptor
-	struct sockaddr_storage		remoteaddr;		// client address
-    socklen_t					addrlen = sizeof remoteaddr;
+    int	sock_desc;		// listening socket descriptor
+	int	new_socket;		// newly accept()ed socket descriptor
+	struct sockaddr_storage	remoteaddr;		// client address
+    socklen_t	addrlen = sizeof remoteaddr;
 
-	int							bufsize = BUFSIZE;
-	char						buffer[bufsize];//buffer for client data
-	struct addrinfo				hints;			//hints for getaddrinfo
-	struct addrinfo				*result;		//point to the result
-	int							status;
+	char	buffer[BUFSIZE];		//buffer for client data
+	struct addrinfo	hints;		//hints for getaddrinfo
+	struct addrinfo	*result;		//point to the result
+	int	status;
 	
-	memset(&hints, 0, sizeof hints);			//make sure the struct is empty
-	hints.ai_family = AF_UNSPEC;				//don't care IPv4 or IPv6
-	hints.ai_socktype = SOCK_STREAM;			//TCP stream sockets
-	hints.ai_flags = AI_PASSIVE;    		 	// fill in my IP for me
+	memset(&hints, 0, sizeof hints);		//make sure the struct is empty
+	hints.ai_family = AF_UNSPEC;		//don't care IPv4 or IPv6
+	hints.ai_socktype = SOCK_STREAM;		//TCP stream sockets
+	hints.ai_flags = AI_PASSIVE;		// fill in my IP for me
 	
 	// status = getaddrinfo( MYIP , port , &hints , &result);	//use designated ip
 	status = getaddrinfo( NULL , port.c_str() , &hints , &result);	//use system ip
@@ -61,6 +72,7 @@ int main( int argc , char *argv[] )
 		fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
 	}
 	
+	/* create socket for listening to new connections */
 	sock_desc = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
 	if ( sock_desc == -1)
 	{
@@ -77,12 +89,12 @@ int main( int argc , char *argv[] )
         exit(1);
 	}
 	
-	/* bind the socket to the port specified above */
+	/* bind the socket to the port specified */
 	int success = bind ( sock_desc , result->ai_addr , result->ai_addrlen );
 	if(success != 0)
 	{
 		close(sock_desc);
-		perror("bind:- ");
+		perror("Please use another port number : ");
 		exit(2);
 	}
 
@@ -102,22 +114,19 @@ int main( int argc , char *argv[] )
 		/* ITERATIVE APPROACH */
 		case 1:
 		{
-			int loopno = 0;
 			while(1)
 			{
-				cout<<"loop :"<<loopno++<<"\n";
-				/* accept a connection */
+				/* accept a new connection */
 				new_socket = accept(sock_desc, (struct sockaddr *)&remoteaddr, &addrlen);
 				if (new_socket < 0)
 				{
 					perror("Accept connection:- ");
 					exit(1);
 				}
+				memset(buffer, 0, BUFSIZE);
 				
-				memset(buffer, 0, bufsize);
-				
-				/* receive querry */
-				int rdatalen = recv ( new_socket, buffer, bufsize, 0);
+				/* receive query from the client */
+				int rdatalen = recv ( new_socket, buffer, BUFSIZE, 0);
 				if ( rdatalen <= 0 )
 				{
 					perror("Receive:- ");
@@ -144,21 +153,19 @@ int main( int argc , char *argv[] )
 		/* SELECT MODE */
 		case 2:
 		{
-			fd_set 				master;    // master file descriptor list
-			fd_set 				read_fds;  // temp file descriptor list for select()
-			int 				fdmax;     // maximum file descriptor number
+			fd_set	master;		// master file descriptor list
+			fd_set	read_fds;		// temp file descriptor list for select()
+			int		fdmax;		// maximum file descriptor number
 			
-			FD_ZERO(&master);				// clear the entries from the master set
-			FD_ZERO(&read_fds);				// Clear all entries from the temporary set read_fds
+			FD_ZERO(&master);		// clear the entries from the master set
+			FD_ZERO(&read_fds);		// Clear all entries from the temporary set read_fds
 			/* add the listener to the master set */
 			FD_SET ( sock_desc , &master );
 			
 			/* keep track of the biggest file descriptor */
 			fdmax = sock_desc;
-			int loopNo = 1;
 			while(1)
 			{
-				cout<<"loop :"<<loopNo++<<" + fdmax :"<<fdmax<<"\n";
 				read_fds = master;
 				if ( select ( fdmax+1 , &read_fds , NULL , NULL , NULL) == -1)
 				{
@@ -174,7 +181,7 @@ int main( int argc , char *argv[] )
 						if ( i == sock_desc )
 						{
 							/* handle new connections */
-							cout << "Ready to accept a new connection\n";
+							// cout << "Ready to accept a new connection\n";
 							addrlen = sizeof remoteaddr;
 							/* accept a connection */
 							new_socket = accept(sock_desc, (struct sockaddr *)&remoteaddr, &addrlen);
@@ -186,6 +193,7 @@ int main( int argc , char *argv[] )
 							else
 							{
 								FD_SET (new_socket , &master ); // add to master set
+								cout<<"New connection accepted with fd : "<<new_socket<<"\n";
 								if ( new_socket > fdmax )
 								{
 									fdmax = new_socket;
@@ -195,22 +203,21 @@ int main( int argc , char *argv[] )
 						else
 						{
 							/* handle data from client */
-							memset(buffer, 0, bufsize);
+							memset(buffer, 0, BUFSIZE);
 							
 							/* receive data */
-							int rdatalen = recv ( i, buffer, bufsize, 0);
+							int rdatalen = recv ( i, buffer, BUFSIZE, 0);
 							if ( rdatalen <= 0 )
 							{
 								/* got error or connection closed by client */
 								if (rdatalen == 0) {
 									/* connection closed */
-									printf("selectserver: socket %d hung up\n", i);
+									cout<<"selectserver: socket "<<i<<" hung up\n";
 								} else {
-									perror("recv:- ");
+									perror("receive failed : ");
 								}
-								//Deauthorize user
+								// deauthorize user from ith sockfd
 								authenticate[i] = "";
-								cout<<"User deauthorized\n";
 								close(i); // bye!
 								FD_CLR(i, &master); // remove from master set
 							}
@@ -251,11 +258,11 @@ int main( int argc , char *argv[] )
 				pthread_detach ( threadId );
 			}
 			break;
-			default:
-			{
-				cout<<"Invalid mode specified.\n";
-				cout<<"Usage: ./server MODE PORT[optional]\n";
-			}
+		}
+		default:
+		{
+			cout<<"Invalid mode specified.\n";
+			cout<<"Usage: ./server MODE PORT[optional]\n";
 		}
 	}
 	
@@ -280,7 +287,7 @@ void *networkingThread( void *arg)
 	/* receive data */
 	while (recv ( sockfd, buffer, BUFSIZE, 0) > 0 )
 	{
-		cout <<"current socket fd : "<< sockfd <<"\n";
+		//cout <<"current socket fd : "<< sockfd <<"\n";
 		/* some data received from client */
 		char message[BUFSIZE];
 		string response = handleClientData(sockfd, buffer, 1 , authenticate);
@@ -291,7 +298,7 @@ void *networkingThread( void *arg)
 			cout<<"error sending\n";
 		bzero(buffer, BUFSIZE);
 	}
-	/* deauthorize user */
+	/* deauthorize user from sockfd */
 	authenticate[sockfd] = "";
 	cout<<"Socket "<<sockfd<<" hung up\n";
 	close(sockfd); // bye!

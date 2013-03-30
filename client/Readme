@@ -1,0 +1,22 @@
+// CLIENT README
+
+running client code::
+
+executable code generation of client code:
+	1.'exec' folder must be present where makefile and 'src' folder of client is present
+	2.Go to 'client' directory
+	3.run 'make'
+
+running client code:
+	1.go to 'exec' directory
+	2.run './client [HOST] [PORT] [USERNAME] [OPERATION] [DATE] [STARTTIME] [ENDTIME] [EVENTNAME]' 
+			OR
+	3.run './client help'
+	4.Now execute your query as shown in the usage/help.
+	5.The format of each arguments must be strictly followed.
+
+Prerequisite:
+	1.Server IP/hostname
+	2.Port on which server is running
+	3.Server mode ( some services may not be available depending on which mode server is running )
+

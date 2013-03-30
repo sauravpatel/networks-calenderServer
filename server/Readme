@@ -1,0 +1,18 @@
+// SERVER README 
+
+running server code::
+
+executable code generation of client code:
+	1.'exec', 'obj' and 'users'  folder must be present where makefile and 'src' folder of server is present
+	2.Go to 'server' directory
+	3.run 'make'
+
+running client code:
+	1.go to 'exec' directory
+	2.run './server [MODE] [PORT]'
+	3.server can run in three mode( 1 , 2 or 3)
+		a. 1 -> iterative approach
+		b. 2 -> using 'select' function call
+		c. 3 -> using multithreaded approach
+	4.'getall' function is not available in iterative approach
+	5.If port is not specified , server is started on '7000'

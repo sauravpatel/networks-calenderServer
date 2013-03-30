@@ -1,0 +1,28 @@
+All these queries are executed in order, if the order is changed, result
+might be different
+
+Query should be successful in these cases:
+
+./client localhost 7000 saurav add 031513 0900 1100 Test1
+./client localhost 7000 saurav add 031513 1300 1400 Meeting1
+./client localhost 7000 saurav add 031513 1600 1830 Class
+./client localhost 7000 saurav add 031613 0800 0930 Hospital
+./client localhost 7000 saurav add 031513 1400 1500 NetworksClass
+./client localhost 7000 saurav add 031613 1500 1600 Birthday
+./client localhost 7000 saurav update 031613 0800 1000 ENT
+./client localhost 7000 saurav get 031513
+./client localhost 7000 saurav get 031513 0900
+./client localhost 7000 saurav getall
+./client localhost 7000 saurav remove 031513 0900
+./client localhost 7000 saurav add 031513 0800 0930 Compilers
+
+Query should fail in the following case:
+
+./client localhost 7000 saurav add 031513 0800 0930 LectureClash
+./client localhost 7000 saurav update 031713 0800 0830 Update
+./client localhost 7000 saurav add 021713 0800 0900 pastDate
+./client localhost 7000 saurav add 031713 0900 0800 durationNegative
+./client localhost 7000 saurav remove 031513 0900
+./client localhost 7000 saurav update 031513 1600 1830 Class
+
+Any other cases can be checked.

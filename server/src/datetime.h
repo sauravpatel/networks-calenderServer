@@ -26,9 +26,6 @@ bool CheckDateTime(string date, string start, string end)
 	int mm,dd,yyyy,hh[2],min[2];	
 	if((date.length() != 6) || (start.length() != 4 ) || ( end.length() != 4 ) )
 	{
-		cout<<date.length();
-		cout<<start.length();
-		cout<<end.length();
 		//cout<<"Invalid Date or time format.\n";
 		result=false;
 	}
